@@ -1,4 +1,4 @@
-const API_KEY = 'AIzaSyB_6HJmZiuRqzjYTQHrKGYhZdfzZxx0Zkg';
+const API_KEY = 'AIzaSyD4Rj6ykae16mVqklxSl37GArtSV_D-i1s';
 
 const cvText = document.getElementById('cvText');
 const targetRole = document.getElementById('targetRole');
@@ -51,11 +51,10 @@ LABEL: [short label]
 ${role ? '\n### Role Fit\n- [point]' : ''}`;
 
     const models = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash-001',
-        'gemini-1.5-flash-001',
-        'gemini-1.0-pro'
-    ];
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash'
+];
 
     let data = null;
     let lastError = '';
