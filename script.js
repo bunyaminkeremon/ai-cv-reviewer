@@ -1,4 +1,4 @@
-const API_KEY = 'AIzaSyD4Rj6ykae16mVqklxSl37GArtSV_D-i1s';
+let GROQ_KEY = localStorage.getItem('groq_key') || '';
 
 const cvText = document.getElementById('cvText');
 const targetRole = document.getElementById('targetRole');
@@ -9,10 +9,35 @@ const scoreCircle = document.getElementById('scoreCircle');
 const scoreNumber = document.getElementById('scoreNumber');
 const scoreLabel = document.getElementById('scoreLabel');
 const feedback = document.getElementById('feedback');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const saveKeyBtn = document.getElementById('saveKeyBtn');
+const keyStatus = document.getElementById('keyStatus');
+
+if (GROQ_KEY) {
+    apiKeyInput.value = '••••••••••';
+    keyStatus.textContent = 'Key saved';
+    keyStatus.style.color = '#27ae60';
+}
+
+saveKeyBtn.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    if (key && !key.includes('•')) {
+        GROQ_KEY = key;
+        localStorage.setItem('groq_key', key);
+        apiKeyInput.value = '••••••••••';
+        keyStatus.textContent = 'Key saved';
+        keyStatus.style.color = '#27ae60';
+    }
+});
 
 async function analyzeCV() {
     const cv = cvText.value.trim();
     if (!cv) return;
+    if (!GROQ_KEY) {
+        feedback.innerHTML = '<p>Please enter your Groq API key first.</p>';
+        resultSection.style.display = 'block';
+        return;
+    }
 
     const role = targetRole.value.trim();
     analyzeBtn.disabled = true;
@@ -20,21 +45,15 @@ async function analyzeCV() {
     resultSection.style.display = 'none';
     loading.style.display = 'flex';
 
-    const prompt = `You are a professional CV reviewer and career coach. Analyze the following CV and provide:
+    const prompt = `You are a professional CV reviewer. Analyze this CV:
 
-1. A score out of 100
-2. A short label (like "Strong CV", "Needs Work", "Good Foundation", "Excellent")
-3. Strengths (bullet points)
-4. Weaknesses (bullet points)  
-5. Specific suggestions to improve (bullet points)
-6. Missing sections or information
-${role ? `7. How well this CV fits for the role: ${role}` : ''}
-
-CV Content:
 ${cv}
 
-Respond in this exact format:
-SCORE: [number]
+${role ? `Target role: ${role}` : ''}
+
+Respond EXACTLY:
+
+SCORE: [0-100]
 LABEL: [short label]
 
 ### Strengths
@@ -50,51 +69,16 @@ LABEL: [short label]
 - [point]
 ${role ? '\n### Role Fit\n- [point]' : ''}`;
 
-    const models = [
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash'
-];
-
-    let data = null;
-    let lastError = '';
-
-    for (const model of models) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
-                })
-            });
-
-            const result = await res.json();
-
-            if (!result.error && result.candidates && result.candidates[0]) {
-                data = result;
-                break;
-            } else {
-                lastError = result.error ? result.error.message : 'No response';
-            }
-        } catch (err) {
-            lastError = err.message;
-        }
-    }
-
-    if (!data) {
-        feedback.innerHTML = '<p>Could not connect to AI. Error: ' + lastError + '</p>';
-        resultSection.style.display = 'block';
-        loading.style.display = 'none';
-        analyzeBtn.disabled = false;
-        analyzeBtn.textContent = 'Analyze CV';
-        return;
-    }
-
     try {
-        const text = data.candidates[0].content.parts[0].text;
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_KEY },
+            body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 2000 })
+        });
+        const data = await res.json();
+        if (data.error) { feedback.innerHTML = '<p>Error: ' + data.error.message + '</p>'; resultSection.style.display = 'block'; loading.style.display = 'none'; analyzeBtn.disabled = false; analyzeBtn.textContent = 'Analyze CV'; return; }
 
+        const text = data.choices[0].message.content;
         const scoreMatch = text.match(/SCORE:\s*(\d+)/);
         const labelMatch = text.match(/LABEL:\s*(.+)/);
         const score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
@@ -109,19 +93,16 @@ ${role ? '\n### Role Fit\n- [point]' : ''}`;
         scoreNumber.textContent = score;
         scoreLabel.textContent = label;
 
-        let feedbackHtml = text
-            .replace(/SCORE:.*\n?/, '')
-            .replace(/LABEL:.*\n?/, '')
+        let feedbackHtml = text.replace(/SCORE:.*\n?/, '').replace(/LABEL:.*\n?/, '')
             .replace(/### (.+)/g, '<h3>$1</h3>')
             .replace(/^- (.+)/gm, '<li>$1</li>')
             .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .trim();
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').trim();
 
         feedback.innerHTML = feedbackHtml;
         resultSection.style.display = 'block';
     } catch (err) {
-        feedback.innerHTML = '<p>Error parsing response: ' + err.message + '</p>';
+        feedback.innerHTML = '<p>Error: ' + err.message + '</p>';
         resultSection.style.display = 'block';
     }
 
